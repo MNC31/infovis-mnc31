@@ -1,60 +1,165 @@
 <!DOCTYPE html>
-
 <html lang="en">
   <head>
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
 
-```
-<meta
-  name="description"
-  content="INFOSCI 301 visualization comparing data access in the Defogger GitHub repository with the PrivacyLeak-PII dataset from Hugging Face."
->
+    <meta name="description"
+      content="INFOSCI 301 visualization comparing Defogger GitHub data with the PrivacyLeak-PII dataset from Hugging Face.">
+    <meta name="keywords"
+      content="INFOSCI 301, Defogger, GitHub, Hugging Face, PrivacyLeak-PII, PII, privacy, data access">
+    <meta name="author" content="INFOSCI 301">
 
-<meta
-  name="keywords"
-  content="INFOSCI 301, data visualization, Defogger, GitHub, Hugging Face, PrivacyLeak-PII, PII, privacy, data access"
->
-
-<meta name="author" content="INFOSCI 301">
-
-<link rel="icon" href="<%= BASE_URL %>favicon.ico">
-
-<title>INFOSCI 301 — Data Access & Privacy Visualization</title>
-```
-
+    <link rel="icon" href="<%= BASE_URL %>favicon.ico">
+    <title>INFOSCI 301 — Data Access & Privacy Visualization</title>
   </head>
 
   <body>
     <noscript>
-      <strong>
-        We're sorry but this visualization doesn't work properly without
-        JavaScript enabled. Please enable it to continue.
-      </strong>
+      <strong>This visualization requires JavaScript to be enabled.</strong>
     </noscript>
 
-```
-<div id="app"></div>
+    <div id="app"></div>
 
-<!--
-  Data sources used in this project:
+    <!--
+      DATA SOURCES
+      Defogger / GitHub:
+      https://github.com/MNC31/infovis-mnc31
 
-  1. Defogger / GitHub
-     https://github.com/MNC31/infovis-mnc31
+      PrivacyLeak-PII / Hugging Face:
+      https://huggingface.co/datasets/raayraay/privacyleak-pii
 
-  2. PrivacyLeak-PII / Hugging Face
-     https://huggingface.co/datasets/raayraay/privacyleak-pii
+      Local comparison snapshot:
+      frontend/public/data/privacyleak-pii-snapshot.csv
 
-  3. Related Hugging Face Space
-     https://huggingface.co/spaces/dku-infosci301-Autumn2026/Michelle_Week2Reflection
+      No Hugging Face API key is required.
+    -->
 
-  The application uses the Defogger repository as its visualization
-  foundation and PrivacyLeak-PII as the comparative privacy/PII data source.
--->
+    <script>
+      /*
+       * Automatically load the PrivacyLeak-PII CSV.
+       *
+       * Vue components can access the resulting data through:
+       *     window.privacyleakData.rows
+       *
+       * and listen for:
+       *     "privacyleak-data-loaded"
+       *
+       * The CSV is local, so no Hugging Face secret/API token is exposed.
+       */
 
-<!-- built files will be auto injected -->
-```
+      (function loadPrivacyLeakCSV() {
+        const csvPath =
+          '<%= BASE_URL %>data/privacyleak-pii-snapshot.csv';
 
+        function parseCSV(text) {
+          const lines = text.trim().split(/\r?\n/);
+          if (lines.length < 2) return [];
+
+          const headers = lines[0].split(',').map(h => h.trim());
+
+          return lines.slice(1).map(line => {
+            const values = [];
+            let current = '';
+            let quoted = false;
+
+            for (let i = 0; i < line.length; i++) {
+              const char = line[i];
+
+              if (char === '"') {
+                if (quoted && line[i + 1] === '"') {
+                  current += '"';
+                  i++;
+                } else {
+                  quoted = !quoted;
+                }
+              } else if (char === ',' && !quoted) {
+                values.push(current);
+                current = '';
+              } else {
+                current += char;
+              }
+            }
+
+            values.push(current);
+
+            const row = {};
+            headers.forEach((header, index) => {
+              row[header] = values[index] ?? '';
+            });
+
+            row.is_canary = row.is_canary === 'true';
+            row.in_forget_set = row.in_forget_set === 'true';
+            row.pii_count = Number(row.pii_count || 0);
+            row.pii_types = row.pii_types
+              ? row.pii_types.split(';').filter(Boolean)
+              : [];
+
+            return row;
+          });
+        }
+
+        window.privacyleakData = {
+          loading: true,
+          loaded: false,
+          rows: [],
+          error: null
+        };
+
+        fetch(csvPath)
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(
+                'PrivacyLeak-PII CSV could not be loaded (' +
+                response.status +
+                '). Check that the CSV exists at ' +
+                'frontend/public/data/privacyleak-pii-snapshot.csv'
+              );
+            }
+            return response.text();
+          })
+          .then(csvText => {
+            const rows = parseCSV(csvText);
+
+            window.privacyleakData = {
+              loading: false,
+              loaded: true,
+              rows: rows,
+              error: null
+            };
+
+            console.log(
+              'PrivacyLeak-PII snapshot loaded:',
+              rows.length,
+              'rows'
+            );
+
+            window.dispatchEvent(
+              new CustomEvent('privacyleak-data-loaded', {
+                detail: rows
+              })
+            );
+          })
+          .catch(error => {
+            window.privacyleakData = {
+              loading: false,
+              loaded: false,
+              rows: [],
+              error: error.message
+            };
+
+            console.error('PrivacyLeak-PII CSV error:', error);
+
+            window.dispatchEvent(
+              new CustomEvent('privacyleak-data-error', {
+                detail: error
+              })
+            );
+          });
+      })();
+    </script>
+
+    <!-- Vue CLI injects the compiled application files here. -->
   </body>
 </html>
